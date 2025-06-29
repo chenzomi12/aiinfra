@@ -43,11 +43,50 @@
 
 | 推理引擎       | Star(k) | Contributors | Support Models(familys) | Languages  |
 |---------------|---------|:------------:|:-----------------------:|-----------|
-|[vllm](https://github.com/vllm-project/vllm)                   | 49.5 | 1191| 72 | Python(85.3%)、Cuda(9.4%)               |
-[sglang](https://github.com/sgl-project/sglang)                 | 14.5 | 478 | 29 | Python(88.0%)、C++(5.2%)、Cuda(4.7%)    |
 |[TGI](https://github.com/huggingface/text-generation-inference)| 10.2 | 164 | 26 | Python(79.7%)、Rust(15.5%)              |
+|[vllm](https://github.com/vllm-project/vllm)                   | 49.5 | 1207| 72 | Python(85.3%)、Cuda(9.4%)               |
+[SGLang](https://github.com/sgl-project/sglang)                 | 15.0 | 478 | 29 | Python(88.0%)、C++(5.2%)、Cuda(4.7%)    |
 |[llama.cpp](https://github.com/ggml-org/llama.cpp)             | 81.7 | 1165| 63 | C++(63.4%)、C(11.4%)                    |
 |[TensorRT-LLM](https://github.com/NVIDIA/TensorRT-LLM)         | 10.7 | 233 | 52 | C++(94.4%)                              |
 |[Imdeploy](https://github.com/InternLM/lmdeploy)               | 6.5  | 113 | 30 | Python(61.7%)、C++(21.8%)、Cuda(15.4%)  |
 
 (注:表格信息收集与2025年6月12日)
+
+接下来我们将借助上面这个表格来逐个进行对比了解当下一些比较流行的推理框架的基本情况:
+
+## 主流推理框架简介
+-  **TGI(text-generation-inference)**，也就是text-generation-inference，它是用Huggingface推出的用于大模型推理的一个框架。其最大的特点是作为Huggingface的官方推理框架，享受到了Huggingface的生态生态便利，可以做到开箱即用。比较值得注意的是而该推理框架的编程语言采用了Python+Rust形式，其中使用Rust进行后端设计与优化。但也正是因为这一点，导致很多Python开发者难以使用该框架进行二次开发与优化，加上该框架本身投入的开发人员较少，导致该社区的参与者相对较少，只有一百六十个左右。总的来说，TGI有以下特点：
+   - TGI宣称使用了pagedattention,但是实际吞吐性能一般，预分配显存时浪费严重，batch_size无法增长。
+   - TGI的cpu和gpu调度串行模型，导致cpu调度计算时gpu闲置。吞吐性能变差。
+   - TGI使用rust来实现调度逻辑，导致广大开发者无法快速上手进行二次开发优化。
+   - 自身开发人员投入不够，版本更新太慢。
+- **vllm**: 该项目最初由加州大学伯克利分校(UCB)的Sky Computing Lab所开发的项目，现如今已经发展成为一个由学术界和工业界共同贡献的开源社区项目。事实上vllm已经成为llm业界推理的标杆框架之一了.而该推理框架有如下几个特点：
+  - 有着大量且稳定的开发者，作者基本为在读博士生，在github上的Star仅次于llama.cpp，但Contributors是所有推理框架中最多的。因此 vllm对于模型的支持以及功能特性都是最完善的。
+  - 社区活跃度最高，github 上issue和pr都很多。大量paper都是以vllm作为baseline来开发 demo，因此各种新技术的引入vllm是具有更大优势的。
+  - 基础的各种优化以及进阶的权重量化、kv 压缩、speculate decode、chunked prefill、promot cache、constrained decoding 等功能都是完备的。
+- **SGLang**: 该项目也是由加州大学伯克利分校(UCB)的团队开源创建的，其借鉴了包括不限于vllm、lightllm、Flashiner等推理框架与引擎，是一个以极致吞吐为目标的推理框架。虽然该框架的star数量以及Contributors不及vllm，但是其设计活跃度并不低，并且作者团队也在积极维护开发者生态。其有如下几个特点：
+  - SGLang 吞吐性能最优，通过多进程zmp传输中间数据来cover掉cpu开销高负载下gpu利用率可以到 80% 以上。
+  - SGLang 代码可拓展性很高，主流功能都有支持的情况下，代码比 vllm 清晰简单很多，对于二次开发来说是很重要的。
+  - SGLang 开源维护者积极地回复 issue，而且开发节奏快，有些功能还不太完善的地方下一个版本基本马上就更新了。
+- **llama.cpp**:该框架最开始是一个由Georgi Gerganov个人创办的一个c++高性能推理框架，随着该项目受到越来越多人的关注和支持，现如今已经变成ggml开源生态组织的项目，而不再属于其个人。该框架与其他大模型推理框架最显著的区别是，其专著与在边缘侧场景的推理部署（如个人pc、手机等边缘嵌入式设备）。所以该框架可以高效的在包括苹果mac系列芯片在内的很多arm设备、以及各种边缘加速器上高效运行。其特点可以概括为以下几点：
+  - 轻量级、无依赖。该框架仅仅使用自己的ggml作为张量库进行构建，无任何第三方库的依赖，使得开发者二次开发难度大大降低。
+  - 丰富的后端支持：支持x86、arm、Nidia_GPU、AMD_GPU、Intel_GPU、Vulkan、NPU_CANN 等等。
+  - 支持CPU AVX指令集进行矢量计算加速、cpu多核并行计算、CPU+GPU混合计算。
+  - 支持低精度量化：1.5bit、2 bit、3 bit、4 bit、5 bit、6 bit和 8 bit整数量化，可加快推理速度并减少内存使用。
+- **TensorRT-LLM**：该框架是英伟达官方推出的针对自家nvidia系列产品而优化的llm推理框架。值得注意的是，该框架最开始推出时包括核心的调度机制等代码都没有开源，属于半开源的状态，直至2025年3月22日才进行了完全的开源，成为开源框架。该框架支持pytroch和TensorRT两种类型的后端推理，可由用户自行选择。
+- **lmdeploy**：该框架由MMDeploy和MMRazor团队联合开发，是涵盖了 LLM 任务的全套轻量化、部署和服务解决方案。该框架和vllm和SGlang的一个区别是其python的使用占比只有一半左右，其中大量使用了c++进行底层构建与优化。该框架的特性如下：
+  - 相比 vllm 和 sglang 的 python 实现，lmdeploy 调度和执行 runtime 代码使用了 C++ 实现
+  - cpu 调度策略优，高负载下 gpu 利用率稳定在 95%
+  - 对多模态模型支持很好，支持大量的多模态模型
+  - 对国内GPU厂商的硬件支持较好
+  - 开发人员较少，功能比 vllm和sglang来说功能还是不太丰富。
+
+# 推理性能分析
+
+## 推理性能指标
+
+TBD
+
+## 推理性能对比
+
+TBD
