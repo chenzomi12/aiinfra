@@ -14,6 +14,8 @@ Author by: 陈悦孜
 
 ## 编译器与运行时：从手动优化到自动代码生成
 
+在AI集群基础软件领域中，编译器和运行时系统是支撑高效计算、资源管理和性能优化的核心组件。编译器在AI集群中负责将高级代码（如Python/PyTorch/TensorFlow）转换为底层硬件（如GPU/TPU/ASIC）可执行的高效代码，同时进行深度优化；运行时系统管理程序执行期间的动态行为，确保计算任务高效利用集群资源。
+
 ### 发展历程：传统编译器（1980s-2000s）
 
 #### Fortran 主导 ：Intel Fortran Compiler、PGI Compiler 通过向量化和循环展开提升性能
@@ -191,14 +193,116 @@ Triton是一种围绕 “分块（tile）” 概念构建的语言和编译器�
 
 ## 计算库：从基础数学到领域专用
 
+在AI集群基础软件领域中，计算库是连接上层AI框架与底层硬件的关键组件，通过高度优化的基础算子实现高效计算，直接决定了AI训练和推理的性能。
+
 ### 发展历程：经典数学库（1970s-2000s）
+
+#### BLAS/LAPACK：基础线性代数子程序库（e.g. Intel MKL、OpenBLAS）优化矩阵运算性能。
+
+LAPACK（Linear Algebra PACKage）是Fortran语言开发的一个线性代数库，用于数值计算的函数集。 LAPACK提供了丰富的工具函数，可用于诸如解多元线性方程式、线性系统方程组的最小二乘解、计算特征向量、用于计算矩阵QR分解的Householder变换、以及奇异值分解等问题。 
+
+BLAS（Basic Linear Algebra Subprograms，基础线性代数程序集）是一个应用程序接口（API）标准，用以规范发布基础线性代数操作的数值库（如矢量或矩阵乘法）。该程序集最初发布于1979年，并用于建立更大的数值程序包（如LAPACK）。在高性能计算领域，BLAS被广泛使用。例如，LINPACK的运算成绩则很大程度上取决于BLAS中子程序DGEMM的表现。， 其中包含用于向量-向量运算、矩阵-向量运算和矩阵-矩阵运算三个级别的基本线性代数子程序。
+ 
+为提高性能，各软硬件厂商则针对其产品对BLAS接口实现进行高度优化。比如英特尔的MKL和OpenBLAS (http://www.openblas.net)都是线性代数库，都用于优化矩阵计算，提高运算性能。很多开源的python库如SciPy和NumPy都基于OpenBLAS/MKL实现。
+
+#### FFTW：快速傅里叶变换库支持千万级数据点计算。
+
+FFTW（The Fastest Fourier Transform in the West，快速傅里叶变换）是由麻省理工学院计算机科学实验室超级计算技术组开发的一套离散傅立叶变换(DFT)的计算库，开源、高效和标准C语言编写的代码使其得到了非常广泛的应用。Intel的数学库和Scilib(类似于Matlab的科学计算软件)都使用FFTW做FFT计算。FFTW是计算离散Fourier变换(DFT)的快速C程序的一个完整集合，在天文信号处理和气候模拟，医学MRI成像和量子计算模拟等超大规模数据场景下，可以支持千万级数据点（如10M~100M点）的计算。
 
 ### 发展历程：领域专用库（2010s至今）
 
+#### 稀疏矩阵库：SuiteSparse、PETSc 支持非结构化网格求解。
+
+在稀疏矩阵计算库里，SuiteSparse由Tim Davis开发，包含GPU加速组件（如SuiteSparse:GraphBLAS和CHOLMOD），支持稀疏矩阵计算。虽GPU专注度不及cuSPARSE，但提供更广泛的算法，如图算法、稀疏直接求解器。PETSc是面向CPU的大规模科学计算库，支持基于MPI的分布式计算。虽可通过外部模块调用CUDA，但其核心优势在于CPU端的迭代求解器和预处理器。cuSPARSE是NVIDIA推出的GPU加速稀疏线性代数库，专为A100/H100/L40S等CUDA GPU优化。提供高度优化的稀疏矩阵运算（如SpMV矩阵向量乘法、SpMM矩阵乘法、三角求解器），它借助GPU并行性，在大规模问题上通常优于CPU库。在稀疏矩阵库选型里，考虑GPU或者CPU场景可以挑选专用加速库。
+
+#### AI加速库：cuDNN（NVIDIA）、OneDNN（Intel）优化 AI 算子。
+
+在AI加速领域里，CuDNN (CUDA Deep Neural Network library)是英伟达推出的针对NVIDIA GPU（如A100、H100）优化，基于CUDA和Tensor Core的专用于深度学习框架和应用的GPU加速库。英特尔也有针对Intel CPU（如Xeon、AMX指令集）和GPU（如Intel Arc、Xe架构）优化的AI加速库OneDNN(oneAPI Deep Neural Network Library)。两者都是闭源深度学习加速库，专为优化神经网络计算而设计，主要应用于训练和推理场景，专用于硬件加速，实现AI计算极致性能。它们都支持常见神经网络算子，提供低精度计算加速推理，都集成到主流深度学习框架。
+
+![英特尔OneDNN](images/03TrendSoft16.png)
+
+#### 国产库突破：华为CANN异构计算架构提供 AI算子库。
+
+把眼光放到国内，华为 CANN（Compute Architecture for Neural Networks，神经网络计算架构）是面向 AI 计算的全栈软件平台，旨在高效利用 昇腾（Ascend）AI 处理器NPU（如昇腾 910/310）的异构计算能力。其核心组件 AI 算子库（Operator Library）为深度学习训练和推理提供高度优化的计算算子，是昇腾生态的关键基础设施。
+
+![华为CANN](images/03TrendSoft17.png)
+
 ### NVIDIA CUDA 计算库
+
+这里介绍英伟达CUDA部分计算库。
+
+1. AI与机器学习库
+
+|英文缩写 |	英文全称 |	中文名称 |	功能描述 |
+|-|-|-|-|
+|cuDNN |CUDA Deep Neural Network Library|CUDA深度神经网络库	|加速深度学习核心操作（卷积、池化、LSTM等），专为神经网络优化。|
+|cuML	|CUDA Machine Learning|	CUDA机器学习库 |	提供GPU加速的机器学习算法（如分类、回归、聚类），类似Scikit-learn的GPU版。|
+|cuGraph	|CUDA Graph Analytics|	CUDA图分析库	|高性能图算法（如PageRank、最短路径），用于社交网络、推荐系统等。|
+|cuOpt	|CUDA Optimization	|CUDA优化库	|求解组合优化问题（如路径规划、资源调度），适用于物流、交通等领域。|
+
+2. 数学与科学计算库
+
+|英文缩写	|英文全称|	中文名称	|功能描述|
+|-|-|-|-|
+|cuBLAS|	CUDA Basic Linear Algebra Subprograms	|CUDA基础线性代数子程序库	|加速矩阵运算（如矩阵乘法、向量操作），GPU版的BLAS。|
+|cuFFT	|CUDA Fast Fourier Transform	|CUDA快速傅里叶变换库	|高效计算FFT（傅里叶变换），用于信号处理、图像频域分析。|
+|cuSPARSE	|CUDA Sparse Matrix Library	|CUDA稀疏矩阵库	|优化稀疏矩阵运算（如SpMV稀疏矩阵向量乘法），适用于科学计算和推荐系统。|
+|cuSolver	|CUDA Solver Library	|CUDA求解器库	|提供线性方程组求解、矩阵分解（如LU、QR）的高性能实现。|
+|cuRAND	|CUDA Random Number Generation	|CUDA随机数生成库	|生成高质量随机数，用于蒙特卡洛模拟、深度学习初始化等。|
+|cuTENSOR|	CUDA Tensor Primitives Library	|CUDA张量计算库|	加速张量收缩、转置等操作，专为量子计算、物理模拟优化。|
+
+3. 数据处理与分析库
+
+|英文缩写	|英文全称	|中文名称	|功能描述|
+|-|-|-|-|
+|cuDF	|CUDA DataFrames|	CUDA数据帧库	|GPU加速的数据处理（类似Pandas），支持大规模数据清洗、聚合操作。|
+|Thrust	|-	|CUDA并行算法库|	提供STL风格的并行算法（如排序、归约），简化GPU编程。|
+
+4. 图像与多媒体处理库
+
+|英文缩写	|英文全称	|中文名称|	功能描述|
+|-|-|-|-|
+|NPP	|NVIDIA Performance Primitives	|NVIDIA高性能原语库|	加速图像/视频处理（如滤波、色彩转换），适用于计算机视觉和多媒体应用。
+
+![CUDA计算库](images/03TrendSoft18.png)
 
 ### 未来趋势
 
+#### 自动微分库：JAX、Enzyme 支持反向传播与 Hessian 矩阵计算。
+
+当前对于将新领域，例如物理模拟、游戏引擎、气候模型等，引入到机器学习中来，存在一个普遍问题--求梯度时，需要将外来代码通过源码重写或者操作符重载，以融入现有AD（automatic differentiation自动微分）工具（Adept、Autograd等）或深度学习框架（TensorFlow、PyTorch、MindSpore等），这增加了在机器学习工作流中引入外来代码的工作量。这个时候就需要自动微分库来处理梯度计算了。
+
+JAX是基于Python的函数式编程，通过grad、jit、vmap、pmap等函数装饰器实现自动微分、即时编译（JIT）、向量化和并行化，支持高阶微分与复杂控制流，支持任意阶导数（如Hessian矩阵）和动态控制流（lax.scan等）。同时它提供jax.numpy接口，可无缝替换NumPy代码并支持GPU/TPU加速。
+
+MIT提出的Enzyme是一个基于LLVM IR的自动微分编译器插件，可以生成用LLVM IR表达的静态可分析程序的梯度，为C/C++/Fortran等语言提供高效的自动微分支持，兼容现有高性能计算代码。它在编译期间生成梯度代码，避免运行时解释开销；支持复杂模式，处理指针、内存别名、循环等低级语言特性，适合优化遗留代码；与机器学习框架解耦，不依赖Python生态，可直接嵌入高性能计算应用。
+
+JAX是Python生态的高阶自动微分工具，适合快速实现机器学习模型或科学计算原型，拥有Python生态的灵活性和GPU加速特性，支持动态控制流（Python原生）；Enzyme是LLVM生态的底层微分编译器，适合需要编译器级性能或与LLVM工具链集成的场景，C/C++/Fortran等科学计算代码，支持静态分析（LLVM IR级优化）。
+
+#### 量子算法库：Qiskit Aer 模拟器支持量子线路优化，加速量子化学模拟。
+
+量子计算是一个革命性的领域，它利用量子力学的原理以传统计算机无法实现的方式处理信息。与传统计算机使用的比特（0和1）不同，量子计算机使用量子比特（qubit），它可以同时处于多个状态，这种特性称为量子叠加。量子计算机通过量子比特之间的纠缠和干涉效应，在一些特定的计算任务上展现出比传统计算机更强的计算能力，实现并行计算，并更高效地解决复杂问题。
+
+Qiskit是由IBM开发的一个开源量子计算框架，允许研究人员、开发人员和爱好者实验量子电路和算法。它提供了一个基于Python的易于使用的界面来模拟量子计算甚至在真实的量子硬件上运行它们。
+
+Qiskit包含几个有用的组件，如：
+
+1. Qiskit Terra用于构建和运行量子电路。Terra是QISKIT其余部分的基础。Terra为在电路和脉冲级别编写量子程序、针对特定设备的约束对其进行优化，以及在远程访问设备上管理批量实验的执行提供了基础。Terra定义了理想的最终用户体验的接口，以及优化、脉冲调度和后端通信层的有效处理。
+
+2. Qiskit Aer用于高性能量子模拟。Qiskit Aer为使用Qiskit软件堆栈的量子电路提供了高性能模拟器框架。它包含用于执行QISKIT Terra编译的电路的优化C++模拟器后端。Aer还提供了构建高度可配置的噪声模型的工具，用于对在真实设备上执行期间发生的错误进行真实的噪声模拟。
+
+3. Qiskit Aqua是量子计算机算法和模型库。在化学、人工智能（AI）、优化和金融等众多领域，人们已经发现了可以从量子计算能力中获益的问题。然而，量子计算需要非常专业的技能。为了满足广大从业者的需求，他们希望在软件堆栈的各个层次上使用量子计算并为其做出贡献，我们创建了Aqua：一个量子算法库，可以直接调用或通过特定领域的计算应用程序调用：Qiskit Chemistry、Qiskit AI、Qiskit优化和Qiskit财务。
+
+#### 领域特定语言 DSL：Julia语言 SciML 生态实现微分方程求解自动化。
+
+领域特定语言（Domain-Specific Language, DSL）是一种针对特定问题领域设计的编程语言，与通用语言（如Python、C++）相比，它通过高度抽象和语义化语法简化领域内任务的表达。具有专一性、高生产力、嵌入性的特点。DSL通常仅解决某一类问题（如微分方程、数据库查询），用更简洁的代码描述复杂逻辑（如SQL用于数据库操作），常嵌入到通用语言中（如Julia的DSL可通过宏实现）。常见DSL有SQL（数据库查询）、LaTeX（排版）、TensorFlow计算图（机器学习）。
+
+在微分方程领域，SciML（Scientific Machine Learning）是Julia语言中集成了科学计算与机器学习的工具生态，其核心是通过DSL实现微分方程求解的自动化。SciML通用接口涵盖线性系统，非线性系统、积分（正交）、包括离散方程、常微分方程等等的微分方程、优化、偏微分方程，同时支持数据驱动建模。
+
+下图为sciML支持领域和对应接口。
+
+![sciML支持的领域和接口](images/03TrendSoft14.jpeg)
+
+对于需要频繁迭代科学模型的研究（如气候模拟、AI驱动的材料设计），SciML 的 DSL 设计能显著减少“代码翻译”成本，让研究者更聚焦于问题本身。
 ## 存储系统：本地IO到分布式高速访问
 
 ### 发展历程1：本地存储时代（1980s-2000s）
@@ -277,3 +381,17 @@ https://www.eecs.harvard.edu/~htk/publication/2019-mapl-tillet-kung-cox.pdf
 https://zhuanlan.zhihu.com/p/12890124532
 
 https://zhuanlan.zhihu.com/p/1895776568367894849
+
+https://ia800600.us.archive.org/5/items/ittushu-2470/%E6%B8%85%E5%8D%8E%E5%A4%A7%E5%AD%A6%E5%9B%BE%E4%B9%A6%E9%A6%86-%E6%88%98%E7%96%AB%E7%89%88/%E6%96%87%E6%B3%89sp1%E8%A1%A5%E4%B8%81/3207901_%E6%B7%B1%E5%BA%A6%E5%AD%A6%E4%B9%A0_%E8%AF%AD%E9%9F%B3%E8%AF%86%E5%88%AB%E6%8A%80%E6%9C%AF%E5%AE%9E%E8%B7%B5_text.pdf
+
+https://zh.wikipedia.org/wiki/BLAS
+
+https://zh.wikipedia.org/wiki/LAPACK
+
+https://massedcompute.com/faq-answers/?question=How%20do%20cuSPARSE%20and%20SuiteSparse%20compare%20to%20other%20sparse%20linear%20algebra%20libraries%20such%20as%20MKL%20and%20PETSc?
+
+https://zhuanlan.zhihu.com/p/353918898
+
+https://zhuanlan.zhihu.com/p/625259682
+
+https://docs.sciml.ai/Overview/stable/overview/
