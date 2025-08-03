@@ -10,7 +10,11 @@ Multi-head Latent Attention（MLA）是DeepSeek V2中提出的一种Attention变
 
 ### 2.1. MLA的计算过程
 
-以Deepseek V2为例，假如给定一个输入向量$h_t \in \mathbb{R}^{B \times L \times 5120}$，其中$B$为batch size，$L$为sequence length，5120是DeepSeek V2中的特征向量维度，MLA的计算过程如下。**这里补一张MLA计算流程图**
+以Deepseek V2为例，假如给定一个输入向量$h_t \in \mathbb{R}^{B \times L \times 5120}$，其中$B$为batch size，$L$为sequence length，5120是DeepSeek V2中的特征向量维度，MLA的计算过程如下。**这里补一张MLA计算流程图，下面提供了两张，第一张有些bug，kvchache的维度给错了，C的维度应是512，第二张似乎更清晰，但最好分颜色标注出Cache Compress(CC),Absorb,Move_epsilon(ME)三种优化方法相对应的位置**
+
+![mla](./asset/mla.png)
+
+![MLA_Flow](./asset/MLA_Flow.jpeg)
 
 #### 2.1.1. Query
 
@@ -258,6 +262,16 @@ def forward(...):
 
 ## 4. 基于稀疏注意力的长文本优化
 
+### 4.1. Attention的稀疏性
+
+
+
+### 4.2. Prune or Retrieval
+
+
+
+### 4.3. Sparse Attn Framework
+
 
 
 ## 5. CPU的优化
@@ -320,17 +334,52 @@ GGUF 遵循 `<基础名称><尺寸标签><微调><版本><编码><类型><分片
 
 ### 5.3. AMX后端
 
-AMX与AVX-512的区别
+AMX 在硬件层面加速大规模矩阵计算，尤其针对深度学习推理 (deep learning inference) 和机器学习负载 (machine learning workloads) 中的计算密集型部分。它通过引入 Tile 寄存器的概念，将二维子矩阵加载到专用的 Tile 寄存器中，并在寄存器层面执行矩阵乘加 (matrix multiply-accumulate) 操作，从而显著提升吞吐量 (throughput) 和能效 (energy efficiency)。
+
+每个 CPU 核心包含 8 个专用寄存器（tmm0–tmm7），每个寄存器能够容纳最多 16 行 × 64 字节的数据，用于存储二维子矩阵。此外，还有一个 64 字节的配置寄存器 (configuration register, TILECFG)，用于描述每个 tmm 寄存器的行数、列数和行步长 (row stride)。
+
+以 INT8 为例，AMX 能通过一条指令在 16 个 CPU 周期内完成两个 16×64 子矩阵的乘法（即 32,768 次乘加运算 (multiply/add operations)），这使得每个核心在每个周期能完成 2048 次乘加运算——性能是 AVX-512 的 8 倍。在英特尔至强 4 CPU 上，单个核心理论上可提供 4 TOPS 的算力，使其非常适合在 CPU 上执行计算密集型任务。如下图所示：
 
 ![amx_intro](asset/amx_intro.png)
 
 
 
-ktransformers用多级缓存加速activation和weight
+理论上AMX可以比AVX-512快8倍，但实际上受到AMX tile和mmap内存加载不对齐的影响，AMX的计算效率大受影响，ktransformers用多级缓存加速activation和weight，专门为AMX tile重新设计了weight和activation的排布，降低了内存延迟，最大地发挥了AMX的能力。
+
+具体流程如下：
+
+① 专家权重矩阵首先按列切分成多个任务，并动态调度到不同线程。输入激活值 (Input activations) 在任务间共享，并因其局部性 (locality) 通常驻留在共享的 L3 缓存中。
+
+② 在每个任务内部，专家权重按行切分成块，块的大小经过精细调整，以确保输入激活值、权重和中间结果能驻留在 L2 缓存内，从而避免访问 DRAM。
+
+③④⑤ 每个块被视为一组与 AMX Tile 寄存器匹配的子矩阵。在 Tile 级别的计算中，输入 Tile (tmm0–tmm1) 和专家 Tile (tmm2–tmm3) 被加载后，通过四条 AMX 乘法指令直接生成乘积并累加到 Tile 寄存器 (tmm4–tmm7) 中。输出激活值在 Tile 寄存器或 L1 缓存中累加，避免了额外的数据移动。
+
+简而言之，我们充分利用了缓存层次结构 (cache hierarchy)：专家权重和输出激活值的每个数据元素仅访问一次 DRAM，其余访问均命中 L2 或更高级别的缓存；输入激活值也仅从 DRAM 访问一次，后续则命中 L3 或更高级别的缓存。这极大地减少了主存流量，提升了整体执行效率。
 
 ![amx](asset/amx.png)
+
+尽管 AMX 在大规模矩阵乘法上效率很高，但在低算术强度 (low arithmetic intensity) 的情况下，例如在解码阶段 (decode phase) 的向量-矩阵运算中，其表现不佳。这是因为调度 AMX Tile 会产生固定的指令开销 (instruction overhead)，当数据量不足以填满一个 Tile 时，这种开销就显得浪费，从而导致吞吐量 (throughput) 下降。
+
+为了解决这个问题，我们引入了一个轻量级的 AVX-512 核心 (kernel) 作为补充。该核心遵循与 AMX 核心相同的内存布局，但用细粒度 (fine-grained) 的 AVX-512 向量-矩阵乘法替代了重度的 AMX 矩阵-矩阵乘法，从而降低了小矩阵的延迟 (latency)。
+
+KTransformers 在运行时 (runtime) 会根据算术强度动态选择 AMX 或 AVX-512 核心：在长提示词的预填充 (prefill) 阶段（每个专家平均处理超过 4 个 token），系统会自动选择 AMX 核心；而在短提示词的预填充和解码 (decode) 阶段，则会动态切换到 AVX-512 核心。这确保了在不同算术强度条件下都能达到最优效率
+
+MoE 模型每层有多个专家，每个专家都需要进行三次矩阵乘法（Gate、Up、Down 投射），这会产生大量的小规模矩阵乘法任务。独立调度每个小任务会造成巨大的线程间同步开销 (synchronization overhead)，从而拖慢整体推理速度。
+
+因此，我们将一层中所有专家的同类矩阵计算融合成 (fused) 统一的大任务。此外，由于 Gate 和 Up 投射之间没有数据依赖 (data dependencies)，它们的计算也可以被融合，最终将一层的矩阵乘法合并为两大任务，极大地降低了调度开销。
+
+为了解决负载不均 (load imbalance) 的问题——尤其是在预填充 (prefill) 阶段专家激活可能高度倾斜的情况下——我们引入了动态任务调度策略。每个矩阵乘法任务被进一步拆分为多个细粒度的子任务，初始时均匀分配给各个 CPU 线程。一旦某个线程完成了分配给自己的任务，它会原子地 (atomically) 从其他线程“窃取”(steals) 任务，这极大地缓解了负载不均问题，并实现了接近最优的 CPU 资源利用率。
 
 ## 6. 参考文献
 
 [GGUF]: https://github.com/ggml-org/ggml/blob/master/docs/gguf.md
+
+[从代码和公式角度理解 DeepSeek MLA 的矩阵吸收 (Projection Absorption)]: https://yuanchaofa.com/post/hands-on-deepseek-mla-projection-absorption.html
+[大模型KV Cache节省神器MLA学习笔记]: https://zhuanlan.zhihu.com/p/703862723
+[通过矩阵吸收十倍提速 MLA 算子]: https://zhuanlan.zhihu.com/p/700214123
+[deepseekv2-profile]: https://github.com/madsys-dev/deepseekv2-profile
+[再读MLA，还有多少细节是你不知道的]: https://mp.weixin.qq.com/s/E7NwwMYw14FRT6OKzuVXFA
+[缓存与效果的极限拉扯：从MHA、MQA、GQA到MLA]: https://kexue.fm/archives/10091
+
+[InfLLM: Training-Free Long-Context Extrapolation for LLMs with an Efficient Context Memory]: https://arxiv.org/pdf/2402.04617z
 
